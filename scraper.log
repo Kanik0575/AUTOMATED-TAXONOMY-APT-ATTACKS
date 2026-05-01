@@ -1,0 +1,56 @@
+16:51:32  [INFO]  ============================================================
+16:51:32  [INFO]    APT Taxonomy — Stage 1: Data Collection
+16:51:32  [INFO]    API Key: s2k-8u5d36z91DTE...
+16:51:32  [INFO]  ============================================================
+16:51:32  [INFO]  
+── Year 2021 (target 20) ──
+16:51:32  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=0 | collected=0/20
+16:51:36  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=25 | collected=12/20
+16:51:38  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=50 | collected=15/20
+16:51:42  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=75 | collected=19/20
+16:51:44  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=100 | collected=19/20
+16:51:47  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=125 | collected=19/20
+16:51:50  [INFO]    Year 2021: 20 papers collected.
+16:51:50  [INFO]  
+── Year 2022 (target 20) ──
+16:51:50  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=0 | collected=0/20
+16:51:53  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=25 | collected=11/20
+16:51:56  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=50 | collected=14/20
+16:51:59  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=75 | collected=15/20
+16:52:02  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=100 | collected=16/20
+16:52:05  [INFO]    Year 2022: 20 papers collected.
+16:52:05  [INFO]  
+── Year 2023 (target 20) ──
+16:52:05  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=0 | collected=0/20
+16:52:08  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=25 | collected=15/20
+16:52:10  [INFO]    Year 2023: 20 papers collected.
+16:52:10  [INFO]  
+── Year 2024 (target 20) ──
+16:52:10  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=0 | collected=0/20
+16:52:14  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=25 | collected=11/20
+16:52:16  [INFO]    Year 2024: 20 papers collected.
+16:52:16  [INFO]  
+── Year 2025 (target 20) ──
+16:52:16  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=0 | collected=0/20
+16:52:19  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=25 | collected=18/20
+16:52:22  [INFO]    Year 2025: 20 papers collected.
+16:52:22  [INFO]  
+── Year 2026 (target 20) ──
+16:52:22  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=0 | collected=0/20
+16:52:26  [INFO]    Query 1: 'Advanced Persistent Threat detection machine learn' | offset=25 | collected=15/20
+16:52:29  [INFO]    Year 2026: 20 papers collected.
+16:52:29  [INFO]  
+Deduplication removed 0 papers.
+16:52:29  [INFO]  
+============================================================
+16:52:29  [INFO]    TOTAL PAPERS COLLECTED: 120
+16:52:29  [INFO]      2021: ████████████████████ (20)
+16:52:29  [INFO]      2022: ████████████████████ (20)
+16:52:29  [INFO]      2023: ████████████████████ (20)
+16:52:29  [INFO]      2024: ████████████████████ (20)
+16:52:29  [INFO]      2025: ████████████████████ (20)
+16:52:29  [INFO]      2026: ████████████████████ (20)
+16:52:29  [INFO]  ============================================================
+16:52:29  [INFO]  
+  ✓ Saved → apt_papers_raw.csv
+16:52:29  [INFO]    Next: python preprocess.py

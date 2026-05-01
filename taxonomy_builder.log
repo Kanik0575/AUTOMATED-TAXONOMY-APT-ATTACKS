@@ -1,0 +1,130 @@
+16:53:12  [INFO]  ================================================================
+16:53:12  [INFO]    APT Taxonomy — Stage 3: Hierarchical Clustering & Labeling
+16:53:12  [INFO]    Labeling method: Semantic Centroid Matching (Hungarian)
+16:53:12  [INFO]  ================================================================
+16:53:12  [INFO]  Loaded 102 papers from 'apt_papers_clean.csv'
+16:53:12  [INFO]  
+Step 1 — Building semantic embeddings (using RAW abstracts) ...
+16:53:14  [INFO]  Loading sentence-transformer: all-mpnet-base-v2
+16:53:14  [INFO]  No device provided, using mps
+16:53:15  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/modules.json "HTTP/1.1 307 Temporary Redirect"
+16:53:15  [WARNING]  Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+16:53:15  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/modules.json "HTTP/1.1 200 OK"
+16:53:15  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/config_sentence_transformers.json "HTTP/1.1 307 Temporary Redirect"
+16:53:15  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/config_sentence_transformers.json "HTTP/1.1 200 OK"
+16:53:15  [INFO]  Loading SentenceTransformer model from sentence-transformers/all-mpnet-base-v2.
+16:53:16  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/config_sentence_transformers.json "HTTP/1.1 307 Temporary Redirect"
+16:53:16  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/config_sentence_transformers.json "HTTP/1.1 200 OK"
+16:53:16  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+16:53:16  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/README.md "HTTP/1.1 200 OK"
+16:53:16  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/modules.json "HTTP/1.1 307 Temporary Redirect"
+16:53:16  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/modules.json "HTTP/1.1 200 OK"
+16:53:17  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/sentence_bert_config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:17  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/sentence_bert_config.json "HTTP/1.1 200 OK"
+16:53:17  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/adapter_config.json "HTTP/1.1 404 Not Found"
+16:53:17  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:17  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/config.json "HTTP/1.1 200 OK"
+16:53:18  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+16:53:18  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/preprocessor_config.json "HTTP/1.1 404 Not Found"
+16:53:18  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/video_preprocessor_config.json "HTTP/1.1 404 Not Found"
+16:53:18  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/preprocessor_config.json "HTTP/1.1 404 Not Found"
+16:53:19  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:19  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/tokenizer_config.json "HTTP/1.1 200 OK"
+16:53:19  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:19  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/config.json "HTTP/1.1 200 OK"
+16:53:19  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:19  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/config.json "HTTP/1.1 200 OK"
+16:53:20  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:20  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/tokenizer_config.json "HTTP/1.1 200 OK"
+16:53:20  [INFO]  HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-mpnet-base-v2/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+16:53:20  [INFO]  HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-mpnet-base-v2/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+16:53:21  [INFO]  HTTP Request: HEAD https://huggingface.co/sentence-transformers/all-mpnet-base-v2/resolve/main/1_Pooling/config.json "HTTP/1.1 307 Temporary Redirect"
+16:53:21  [INFO]  HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/sentence-transformers/all-mpnet-base-v2/e8c3b32edf5434bc2275fc9bab85f82640a19130/1_Pooling%2Fconfig.json "HTTP/1.1 200 OK"
+16:53:21  [INFO]  HTTP Request: GET https://huggingface.co/api/models/sentence-transformers/all-mpnet-base-v2 "HTTP/1.1 200 OK"
+16:53:21  [INFO]  Encoding 102 abstracts (batch=16) ...
+16:53:25  [INFO]  Embedding matrix: (102, 768)  dtype=float32
+16:53:25  [INFO]  
+Step 2 — Hierarchical Agglomerative Clustering ...
+16:53:25  [INFO]  Computing condensed pairwise distances (euclidean) ...
+16:53:25  [INFO]  Running HAC: linkage=ward, metric=euclidean ...
+16:53:25  [INFO]  Linkage matrix shape: (101, 4)  (n-1 merges expected)
+16:53:25  [INFO]  
+Step 2b — Silhouette diagnostic (defensible k selection) ...
+16:53:25  [INFO]    k= 4: silhouette=+0.0679
+16:53:25  [INFO]    k= 5: silhouette=+0.0757
+16:53:25  [INFO]    k= 6: silhouette=+0.0778
+16:53:25  [INFO]    k= 7: silhouette=+0.0651
+16:53:25  [INFO]    k= 8: silhouette=+0.0631
+16:53:25  [INFO]    k= 9: silhouette=+0.0664
+16:53:25  [INFO]    k=10: silhouette=+0.0718
+16:53:25  [INFO]    → silhouette-optimal k = 6 (score=+0.0778)
+16:53:25  [INFO]  
+Step 3 — Cutting dendrogram at k = 7 ...
+16:53:25  [INFO]  Main cluster sizes: {np.int32(1): 7, np.int32(2): 23, np.int32(3): 10, np.int32(4): 18, np.int32(5): 12, np.int32(6): 2, np.int32(7): 30}
+16:53:25  [INFO]  
+Step 4 — Semantic Centroid Matching (main clusters → gold labels) ...
+16:53:25  [INFO]    Encoding 12 gold-standard labels ...
+16:53:26  [INFO]      C1 → 'Zero-Day Exploits & Vulnerability Analysis'        (cosine=0.3788)
+16:53:26  [INFO]      C2 → 'Threat Intelligence & Kill Chain Modeling'         (cosine=0.5392)
+16:53:26  [INFO]      C3 → 'Malware Analysis & Reverse Engineering'            (cosine=0.4936)
+16:53:26  [INFO]      C4 → 'Financial Theft & Ransomware Operations'           (cosine=0.3488)
+16:53:26  [INFO]      C5 → 'Provenance Graphs & Attack Forensics'              (cosine=0.5534)
+16:53:26  [INFO]      C6 → 'Cyber Espionage & Nation-State Attribution'        (cosine=0.3586)
+16:53:26  [INFO]      C7 → 'ML-Based Intrusion Detection Systems'              (cosine=0.5828)
+16:53:26  [INFO]  
+Step 5 — Sub-clustering inside each main cluster ...
+16:53:26  [INFO]    C1: n=7 < 8, no sub-split
+16:53:26  [INFO]    Encoding 6 gold-standard labels ...
+16:53:26  [INFO]      C1 → 'Behavioral Analysis'                               (cosine=0.4225)
+16:53:26  [INFO]      C2 → 'Defense & Mitigation'                              (cosine=0.3710)
+16:53:26  [INFO]    C2 → 2 sub-clusters: S1=3(Behavioral Analysis), S2=20(Defense & Mitigation)
+16:53:26  [INFO]    Encoding 6 gold-standard labels ...
+16:53:26  [INFO]      C1 → 'Detection & Classification'                        (cosine=0.3643)
+16:53:26  [INFO]      C2 → 'Attribution & Tracking'                            (cosine=0.2232)
+16:53:26  [INFO]    C3 → 2 sub-clusters: S1=9(Detection & Classification), S2=1(Attribution & Tracking)
+16:53:26  [INFO]    Encoding 6 gold-standard labels ...
+16:53:26  [INFO]      C1 → 'Detection & Classification'                        (cosine=0.3246)
+16:53:26  [INFO]      C2 → 'Defense & Mitigation'                              (cosine=0.3292)
+16:53:26  [INFO]    C4 → 2 sub-clusters: S1=6(Detection & Classification), S2=12(Defense & Mitigation)
+16:53:26  [INFO]    Encoding 6 gold-standard labels ...
+16:53:26  [INFO]      C1 → 'Defense & Mitigation'                              (cosine=0.3136)
+16:53:26  [INFO]      C2 → 'Detection & Classification'                        (cosine=0.2325)
+16:53:26  [INFO]    C5 → 2 sub-clusters: S1=4(Defense & Mitigation), S2=8(Detection & Classification)
+16:53:26  [INFO]    C6: n=2 < 8, no sub-split
+16:53:26  [INFO]    Encoding 6 gold-standard labels ...
+16:53:26  [INFO]      C1 → 'Detection & Classification'                        (cosine=0.3234)
+16:53:26  [INFO]      C2 → 'Defense & Mitigation'                              (cosine=0.3159)
+16:53:26  [INFO]    C7 → 2 sub-clusters: S1=16(Detection & Classification), S2=14(Defense & Mitigation)
+16:53:26  [INFO]  
+Step 6 — Generating visual outputs ...
+16:53:26  [INFO]    ✓ Dendrogram → apt_dendrogram.png
+16:53:26  [INFO]    ✓ Taxonomy tree → apt_taxonomy_tree.png
+16:53:26  [INFO]  
+Step 7 — Writing final taxonomy mapping ...
+16:53:26  [INFO]    ✓ Mapping → final_taxonomy_mapping.csv
+16:53:26  [INFO]  
+================================================================
+16:53:26  [INFO]    FINAL TAXONOMY SUMMARY
+16:53:26  [INFO]  ================================================================
+16:53:26  [INFO]    C1 — Zero-Day Exploits & Vulnerability Analysis  (7 papers, cosine=0.3788)
+16:53:26  [INFO]        └── S1: Zero-Day Exploits & Vulnerability Analysis  (7)
+16:53:26  [INFO]    C2 — Threat Intelligence & Kill Chain Modeling  (23 papers, cosine=0.5392)
+16:53:26  [INFO]        └── S1: Behavioral Analysis  (3)
+16:53:26  [INFO]        └── S2: Defense & Mitigation  (20)
+16:53:26  [INFO]    C3 — Malware Analysis & Reverse Engineering  (10 papers, cosine=0.4936)
+16:53:26  [INFO]        └── S1: Detection & Classification  (9)
+16:53:26  [INFO]        └── S2: Attribution & Tracking  (1)
+16:53:26  [INFO]    C4 — Financial Theft & Ransomware Operations  (18 papers, cosine=0.3488)
+16:53:26  [INFO]        └── S1: Detection & Classification  (6)
+16:53:26  [INFO]        └── S2: Defense & Mitigation  (12)
+16:53:26  [INFO]    C5 — Provenance Graphs & Attack Forensics  (12 papers, cosine=0.5534)
+16:53:26  [INFO]        └── S1: Defense & Mitigation  (4)
+16:53:26  [INFO]        └── S2: Detection & Classification  (8)
+16:53:26  [INFO]    C6 — Cyber Espionage & Nation-State Attribution  (2 papers, cosine=0.3586)
+16:53:26  [INFO]        └── S1: Cyber Espionage & Nation-State Attribution  (2)
+16:53:26  [INFO]    C7 — ML-Based Intrusion Detection Systems  (30 papers, cosine=0.5828)
+16:53:26  [INFO]        └── S1: Detection & Classification  (16)
+16:53:26  [INFO]        └── S2: Defense & Mitigation  (14)
+16:53:26  [INFO]  
+Done. Review cosine scores — values below 0.25 indicate
+16:53:26  [INFO]  poor label fit; consider adding more specific gold labels.
