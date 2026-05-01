@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-
+# Headless matplotlib (works on servers, in CI, etc.)
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -27,6 +27,8 @@ from matplotlib.patches import Patch
 INPUT_CSV       = "apt_papers_clean.csv"
 DENDROGRAM_PNG  = "apt_dendrogram.png"
 TREE_PNG        = "apt_taxonomy_tree.png"
+SILHOUETTE_PNG  = "silhouette_scores.png"
+CORPUS_DIST_PNG = "corpus_distribution.png"
 MAPPING_CSV     = "final_taxonomy_mapping.csv"
 LOG_FILE        = "taxonomy_builder.log"
 
@@ -36,7 +38,7 @@ EMBED_MODEL_NAME = "all-mpnet-base-v2"
 
 N_MAIN_CLUSTERS  = 7       
 N_SUB_PER_MAIN   = 2        
-MIN_FOR_SUBSPLIT = 8        
+MIN_FOR_SUBSPLIT = 8       
 LINKAGE_METHOD   = "ward"
 LINKAGE_METRIC   = "euclidean"
 
@@ -56,7 +58,7 @@ GOLD_LABELS = [
     "Data Exfiltration & Persistent Access",
 ]
 
-
+# Distinct color for each main cluster (used in dendrogram + tree)
 CLUSTER_COLORS = [
     "#e6194b",   # red
     "#3cb44b",   # green
@@ -70,7 +72,7 @@ CLUSTER_COLORS = [
     "#469990",   # teal
 ]
 
-
+# Diagnostic
 SILHOUETTE_K_RANGE = range(4, 11)
 
 
@@ -89,16 +91,7 @@ log = logging.getLogger(__name__)
 
 
 def build_embeddings(texts: List[str], model_name: str = EMBED_MODEL_NAME) -> Tuple[np.ndarray, object]:
-    """Encode abstracts into dense semantic vectors.
-
-    Uses sentence-transformers, which handles tokenization, attention,
-    and mean-pooling internally. Outputs are L2-normalized so that
-    Euclidean distance becomes a monotonic function of cosine distance —
-    essential because Ward linkage requires Euclidean.
-
-    Returns the embedding matrix AND the loaded model (reused later
-    for encoding gold-standard labels in Semantic Centroid Matching).
-    """
+    
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError as e:
@@ -115,7 +108,7 @@ def build_embeddings(texts: List[str], model_name: str = EMBED_MODEL_NAME) -> Tu
         texts,
         batch_size=16,
         show_progress_bar=True,
-        normalize_embeddings=True,   # unit vectors → cos ≡ Euclidean (monotone)
+        normalize_embeddings=True,   
         convert_to_numpy=True,
     )
     log.info(f"Embedding matrix: {emb.shape}  dtype={emb.dtype}")
@@ -140,11 +133,7 @@ def cut_clusters(Z: np.ndarray, n_clusters: int) -> np.ndarray:
 
 def silhouette_sweep(emb: np.ndarray, Z: np.ndarray,
                      k_range=SILHOUETTE_K_RANGE) -> Dict[int, float]:
-    """Diagnostic: silhouette score across candidate k values.
-
-    Higher = tighter, better-separated clusters. Use this to defend
-    your choice of k to a sceptical examiner.
-    """
+    
     scores: Dict[int, float] = {}
     for k in k_range:
         labels = cut_clusters(Z, k)
@@ -170,7 +159,7 @@ def assign_labels_by_centroid(
     unique_clusters = sorted(set(cluster_ids))
     n_clusters = len(unique_clusters)
 
-    
+    # Step 1 — Cluster centroids (mean of member embeddings, re-normalized)
     centroids = np.zeros((n_clusters, emb.shape[1]), dtype=np.float32)
     for i, c in enumerate(unique_clusters):
         mask = cluster_ids == c
@@ -178,7 +167,7 @@ def assign_labels_by_centroid(
     norms = np.linalg.norm(centroids, axis=1, keepdims=True)
     centroids = centroids / np.clip(norms, 1e-9, None)
 
-    
+    # Step 2 — Embed gold-standard labels with the same model
     log.info(f"  Encoding {len(gold_labels)} gold-standard labels ...")
     label_emb = model.encode(
         gold_labels,
@@ -186,10 +175,10 @@ def assign_labels_by_centroid(
         convert_to_numpy=True,
     )
 
-   
-    sim_matrix = centroids @ label_emb.T   
+    # Step 3 — Cosine similarity matrix (clusters × labels)
+    sim_matrix = centroids @ label_emb.T   # (n_clusters, n_labels)
 
-    
+    # Step 4 — Hungarian assignment (maximize similarity = minimize -sim)
     row_ind, col_ind = linear_sum_assignment(-sim_matrix)
 
     label_map: Dict[int, str] = {}
@@ -234,11 +223,10 @@ def plot_dendrogram(Z: np.ndarray, leaf_labels: List[str],
                     out_path: str, n_clusters: int,
                     cluster_labels: np.ndarray,
                     label_map: Dict[int, str]) -> None:
-    """Scientific dendrogram with cluster-colored branches and a legend
-    mapping each color to its semantic taxonomy label."""
+    
     n_samples = len(leaf_labels)
 
-    
+    # Build color map: cluster_id → hex color
     unique_clusters = sorted(set(cluster_labels))
     color_map: Dict[int, str] = {}
     for i, cid in enumerate(unique_clusters):
@@ -252,7 +240,7 @@ def plot_dendrogram(Z: np.ndarray, leaf_labels: List[str],
         labels=leaf_labels,
         leaf_rotation=90,
         leaf_font_size=6,
-        color_threshold=0,         
+        color_threshold=0,         # disable default coloring
         above_threshold_color="#888888",
         link_color_func=_make_link_color_func(Z, cluster_labels,
                                               color_map, n_samples),
@@ -384,6 +372,53 @@ def plot_taxonomy_tree(
     log.info(f"  ✓ Taxonomy tree → {out_path}")
 
 
+def plot_silhouette(scores: Dict[int, float], chosen_k: int,
+                    out_path: str) -> None:
+    """Plot silhouette score vs number of clusters (k) with chosen k marked."""
+    if not scores:
+        log.warning("No silhouette scores to plot.")
+        return
+
+    ks = sorted(scores.keys())
+    vals = [scores[k] for k in ks]
+
+    fig, ax = plt.subplots(figsize=(8, 5), dpi=140)
+    ax.plot(ks, vals, "o-", color="#2ca02c", linewidth=2, markersize=8)
+    ax.axvline(x=chosen_k, color="#dc2626", linewidth=2, linestyle="--",
+               label=f"chosen k = {chosen_k}")
+    ax.set_xlabel("k", fontsize=12)
+    ax.set_ylabel("Silhouette score (cosine)", fontsize=12)
+    ax.set_title("Silhouette Score vs Number of Clusters (k)", fontsize=13)
+    ax.set_xticks(ks)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=11, frameon=True)
+    plt.tight_layout()
+    plt.savefig(out_path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    log.info(f"  ✓ Silhouette plot → {out_path}")
+
+
+def plot_corpus_distribution(df: pd.DataFrame, out_path: str) -> None:
+    """Bar chart of paper count per publication year."""
+    year_counts = df["year"].value_counts().sort_index()
+
+    fig, ax = plt.subplots(figsize=(8, 5), dpi=140)
+    bars = ax.bar(year_counts.index.astype(str), year_counts.values,
+                  color="#4682b4", edgecolor="white", linewidth=0.8)
+    for bar, val in zip(bars, year_counts.values):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.3,
+                str(val), ha="center", va="bottom", fontsize=11, fontweight="bold")
+    ax.set_xlabel("Year", fontsize=12)
+    ax.set_ylabel("Number of Papers", fontsize=12)
+    ax.set_title("Corpus Distribution by Publication Year", fontsize=13)
+    ax.set_ylim(0, max(year_counts.values) + 3)
+    ax.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    log.info(f"  ✓ Corpus distribution → {out_path}")
+
+
 
 def main() -> None:
     log.info("=" * 64)
@@ -405,34 +440,35 @@ def main() -> None:
         log.error(f"Corpus too small (n={len(df)}); HAC needs ≥20 for meaningful tree.")
         return
 
-    
+    # ── Step 1 — Embeddings (RAW abstracts; transformers expect grammar) ──
     log.info("\nStep 1 — Building semantic embeddings (using RAW abstracts) ...")
     raw_texts = df["abstract"].fillna("").astype(str).tolist()
     emb, model = build_embeddings(raw_texts)
 
-    
+    # ── Step 2 — HAC ──
     log.info("\nStep 2 — Hierarchical Agglomerative Clustering ...")
     Z = hac_linkage(emb)
 
-    
+    # ── Step 2b — Silhouette diagnostic ──
     log.info("\nStep 2b — Silhouette diagnostic (defensible k selection) ...")
-    silhouette_sweep(emb, Z)
+    sil_scores = silhouette_sweep(emb, Z)
+    plot_silhouette(sil_scores, N_MAIN_CLUSTERS, SILHOUETTE_PNG)
 
-    
+    # ── Step 3 — Cut to N main clusters ──
     log.info(f"\nStep 3 — Cutting dendrogram at k = {N_MAIN_CLUSTERS} ...")
     main_labels = cut_clusters(Z, N_MAIN_CLUSTERS)
     df["cluster_id"] = main_labels
     main_counts = Counter(main_labels)
     log.info(f"Main cluster sizes: {dict(sorted(main_counts.items()))}")
 
-    
+    # ── Step 4 — Semantic Centroid Matching for main clusters ──
     log.info("\nStep 4 — Semantic Centroid Matching (main clusters → gold labels) ...")
     main_labels_map, main_sim_map = assign_labels_by_centroid(
         emb, main_labels, GOLD_LABELS, model
     )
     df["cluster_label"] = df["cluster_id"].map(main_labels_map)
 
-    
+    # ── Step 5 — Sub-clustering inside each main (depth-2 hierarchy) ──
     log.info("\nStep 5 — Sub-clustering inside each main cluster ...")
     df["sub_id"] = 0
     sub_labels_map: Dict[Tuple[int, int], str] = {}
@@ -469,7 +505,7 @@ def main() -> None:
         for sid in sorted(set(sub_lbl)):
             sub_sizes[(c, int(sid))] = int((sub_lbl == sid).sum())
 
-        
+        # Centroid-match sub-clusters against sub-gold-labels
         if len(set(sub_lbl)) >= 2:
             sub_label_map_local, _ = assign_labels_by_centroid(
                 sub_emb, sub_lbl, SUB_GOLD_LABELS, model
@@ -491,7 +527,7 @@ def main() -> None:
         axis=1,
     )
 
-    
+    # ── Step 6 — Visual outputs ──
     log.info("\nStep 6 — Generating visual outputs ...")
 
     # Dendrogram
@@ -503,7 +539,7 @@ def main() -> None:
                     cluster_labels=main_labels,
                     label_map=main_labels_map)
 
-    
+    # Tree
     plot_taxonomy_tree(
         root_label="APT Research\nTaxonomy",
         main_labels_map=main_labels_map,
@@ -513,7 +549,10 @@ def main() -> None:
         out_path=TREE_PNG,
     )
 
-    
+    # Corpus year distribution
+    plot_corpus_distribution(df, CORPUS_DIST_PNG)
+
+    # ── Step 7 — Mapping CSV ──
     log.info("\nStep 7 — Writing final taxonomy mapping ...")
     out_cols = [
         "paper_id", "title", "year", "authors", "venue",
@@ -523,7 +562,7 @@ def main() -> None:
     df[out_cols].to_csv(MAPPING_CSV, index=False, encoding="utf-8")
     log.info(f"  ✓ Mapping → {MAPPING_CSV}")
 
-    
+    # ── Final summary ──
     log.info("\n" + "=" * 64)
     log.info("  FINAL TAXONOMY SUMMARY")
     log.info("=" * 64)
