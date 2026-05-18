@@ -1,3 +1,51 @@
+"""
+taxonomy_builder.py — Stage 3: Hierarchical Taxonomy Construction
+==================================================================
+Builds an automated, two-level hierarchical taxonomy over the cleaned
+APT research corpus (`apt_papers_clean.csv`).
+
+Pipeline
+--------
+  1. Load corpus (raw abstract for embedding)
+  2. Encode abstracts with a sentence-transformer (semantic embeddings)
+  3. Hierarchical Agglomerative Clustering (Ward linkage, Euclidean)
+  4. Diagnostic silhouette sweep across candidate k
+  5. Cut to N_MAIN_CLUSTERS top-level groups
+  6. Sub-cluster each main group (depth-2 hierarchy)
+  7. Label clusters via Semantic Centroid Matching against gold-standard
+     APT taxonomy labels (cosine similarity + Hungarian assignment)
+  8. Render dendrogram (scipy) + taxonomy tree (networkx)
+  9. Persist final mapping to CSV
+
+Outputs
+-------
+  • apt_dendrogram.png       — scientific dendrogram with cut line
+  • apt_taxonomy_tree.png    — Root → Cluster → Sub-cluster network
+  • final_taxonomy_mapping.csv  — per-paper assignments
+
+Design notes (read the README before defending this to your professor)
+----------------------------------------------------------------------
+  • Embeddings use `all-mpnet-base-v2` — a *general-purpose* English
+    sentence transformer. It is NOT cybersecurity-specific. True security
+    models (SecBERT, SecureBERT) are masked-LM BERTs requiring custom
+    mean-pooling and have weaker public validation. mpnet is the
+    pragmatically defensible choice for a small academic corpus.
+  • Embeddings are L2-normalized so Ward's required Euclidean distance
+    is monotonic with cosine distance on the unit hypersphere.
+  • Labeling uses Semantic Centroid Matching: each cluster centroid is
+    compared via cosine similarity against embedded gold-standard APT
+    taxonomy labels. The Hungarian algorithm (scipy.optimize.linear_sum_assignment)
+    guarantees globally optimal, non-duplicate label assignment.
+  • This is semi-supervised taxonomy alignment — domain expertise defines
+    candidate categories; the algorithm decides which ones the data
+    supports and how papers map to them.
+
+Required extra packages (not in requirements.txt yet)
+-----------------------------------------------------
+  pip install sentence-transformers==2.7.0 networkx==3.2.1 torch==2.2.0
+
+Author: <you>
+"""
 
 from __future__ import annotations
 
@@ -23,7 +71,9 @@ from sklearn.metrics import silhouette_score
 from matplotlib.patches import Patch
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  CONFIGURATION                                                   │
+# ╰──────────────────────────────────────────────────────────────────╯
 INPUT_CSV       = "apt_papers_clean.csv"
 DENDROGRAM_PNG  = "apt_dendrogram.png"
 TREE_PNG        = "apt_taxonomy_tree.png"
@@ -32,17 +82,20 @@ CORPUS_DIST_PNG = "corpus_distribution.png"
 MAPPING_CSV     = "final_taxonomy_mapping.csv"
 LOG_FILE        = "taxonomy_builder.log"
 
-
+# General-purpose semantic embedder. Honest disclosure in module docstring.
 EMBED_MODEL_NAME = "all-mpnet-base-v2"
 
-
-N_MAIN_CLUSTERS  = 7       
-N_SUB_PER_MAIN   = 2        
-MIN_FOR_SUBSPLIT = 8       
+# HAC parameters
+N_MAIN_CLUSTERS  = 7        # top-level taxonomy buckets (sweet spot for ~120 papers)
+N_SUB_PER_MAIN   = 2        # sub-clusters under each main (only if main is large enough)
+MIN_FOR_SUBSPLIT = 8        # do not split a main cluster smaller than this
 LINKAGE_METHOD   = "ward"
 LINKAGE_METRIC   = "euclidean"
 
-
+# ── GOLD-STANDARD APT TAXONOMY LABELS ──
+# These are expert-defined candidate categories for Semantic Centroid Matching.
+# The Hungarian algorithm will assign the best-fit label to each cluster;
+# surplus labels (len > N_MAIN_CLUSTERS) are simply unassigned.
 GOLD_LABELS = [
     "Cyber Espionage & Nation-State Attribution",
     "Financial Theft & Ransomware Operations",
@@ -76,7 +129,9 @@ CLUSTER_COLORS = [
 SILHOUETTE_K_RANGE = range(4, 11)
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  LOGGING                                                         │
+# ╰──────────────────────────────────────────────────────────────────╯
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  [%(levelname)s]  %(message)s",
@@ -89,9 +144,20 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  EMBEDDINGS                                                      │
+# ╰──────────────────────────────────────────────────────────────────╯
 def build_embeddings(texts: List[str], model_name: str = EMBED_MODEL_NAME) -> Tuple[np.ndarray, object]:
-    
+    """Encode abstracts into dense semantic vectors.
+
+    Uses sentence-transformers, which handles tokenization, attention,
+    and mean-pooling internally. Outputs are L2-normalized so that
+    Euclidean distance becomes a monotonic function of cosine distance —
+    essential because Ward linkage requires Euclidean.
+
+    Returns the embedding matrix AND the loaded model (reused later
+    for encoding gold-standard labels in Semantic Centroid Matching).
+    """
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError as e:
@@ -108,14 +174,16 @@ def build_embeddings(texts: List[str], model_name: str = EMBED_MODEL_NAME) -> Tu
         texts,
         batch_size=16,
         show_progress_bar=True,
-        normalize_embeddings=True,   
+        normalize_embeddings=True,   # unit vectors → cos ≡ Euclidean (monotone)
         convert_to_numpy=True,
     )
     log.info(f"Embedding matrix: {emb.shape}  dtype={emb.dtype}")
     return emb, model
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  CLUSTERING                                                      │
+# ╰──────────────────────────────────────────────────────────────────╯
 def hac_linkage(emb: np.ndarray) -> np.ndarray:
     """Compute the Ward-linkage matrix Z from an embedding matrix."""
     log.info(f"Computing condensed pairwise distances ({LINKAGE_METRIC}) ...")
@@ -133,7 +201,11 @@ def cut_clusters(Z: np.ndarray, n_clusters: int) -> np.ndarray:
 
 def silhouette_sweep(emb: np.ndarray, Z: np.ndarray,
                      k_range=SILHOUETTE_K_RANGE) -> Dict[int, float]:
-    
+    """Diagnostic: silhouette score across candidate k values.
+
+    Higher = tighter, better-separated clusters. Use this to defend
+    your choice of k to a sceptical examiner.
+    """
     scores: Dict[int, float] = {}
     for k in k_range:
         labels = cut_clusters(Z, k)
@@ -148,14 +220,34 @@ def silhouette_sweep(emb: np.ndarray, Z: np.ndarray,
     return scores
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  SEMANTIC CENTROID MATCHING (replaces c-TF-IDF)                  │
+# ╰──────────────────────────────────────────────────────────────────╯
 def assign_labels_by_centroid(
     emb: np.ndarray,
     cluster_ids: np.ndarray,
     gold_labels: List[str],
     model,
 ) -> Tuple[Dict[int, str], Dict[int, float]]:
-    
+    """Assign each cluster the gold label whose embedding is closest
+    to that cluster's centroid, using the Hungarian algorithm for
+    globally optimal one-to-one assignment.
+
+    How it works
+    ------------
+    1. Compute the centroid (mean vector) of all paper embeddings in
+       each cluster. L2-normalize so cosine similarity = dot product.
+    2. Embed the gold-standard label strings with the SAME model.
+    3. Build a (n_clusters × n_labels) cosine similarity matrix.
+    4. Run the Hungarian algorithm (linear_sum_assignment) on the
+       negated matrix to find the assignment that maximizes total
+       similarity while guaranteeing no two clusters share a label.
+
+    Returns
+    -------
+    label_map   : {cluster_id: assigned_label}
+    sim_map     : {cluster_id: cosine_similarity_score}
+    """
     unique_clusters = sorted(set(cluster_ids))
     n_clusters = len(unique_clusters)
 
@@ -193,7 +285,9 @@ def assign_labels_by_centroid(
     return label_map, sim_map
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  VISUALIZATION                                                   │
+# ╰──────────────────────────────────────────────────────────────────╯
 def _leaves_under(node_id: int, Z: np.ndarray, n_samples: int) -> set:
     """Recursively collect all leaf indices beneath a linkage node."""
     if node_id < n_samples:
@@ -209,7 +303,11 @@ def _make_link_color_func(
     color_map: Dict[int, str],
     n_samples: int,
 ):
-   
+    """Return a callable for scipy dendrogram's `link_color_func`.
+
+    Colors a branch by its cluster if ALL leaves below it belong to
+    the same cluster; otherwise gray (inter-cluster merge).
+    """
     def link_color_func(node_id: int) -> str:
         leaves = _leaves_under(node_id, Z, n_samples)
         clusters = {cluster_labels[l] for l in leaves}
@@ -223,7 +321,8 @@ def plot_dendrogram(Z: np.ndarray, leaf_labels: List[str],
                     out_path: str, n_clusters: int,
                     cluster_labels: np.ndarray,
                     label_map: Dict[int, str]) -> None:
-    
+    """Scientific dendrogram with cluster-colored branches and a legend
+    mapping each color to its semantic taxonomy label."""
     n_samples = len(leaf_labels)
 
     # Build color map: cluster_id → hex color
@@ -272,27 +371,15 @@ def plot_dendrogram(Z: np.ndarray, leaf_labels: List[str],
     log.info(f"  ✓ Dendrogram → {out_path}")
 
 
-def _hierarchical_layout(G: nx.DiGraph, root: str) -> Dict[str, Tuple[float, float]]:
-    
-    levels: Dict[int, List[str]] = defaultdict(list)
-
-    def walk(n: str, depth: int) -> None:
-        levels[depth].append(n)
-        for child in G.successors(n):
-            walk(child, depth + 1)
-    walk(root, 0)
-
-    width = max(len(v) for v in levels.values())
-    pos: Dict[str, Tuple[float, float]] = {}
-    for depth, nodes in levels.items():
-        y = -depth * 1.5
-        if len(nodes) == 1:
-            xs = [0.0]
-        else:
-            xs = np.linspace(-width / 2.0, width / 2.0, len(nodes))
-        for x, n in zip(xs, nodes):
-            pos[n] = (float(x), y)
-    return pos
+def _wrap_label(text: str, max_chars: int = 28) -> str:
+    """Word-wrap a label so no line exceeds max_chars.
+    Preserves existing newlines (e.g. the '(n=X)' part)."""
+    import textwrap
+    parts = text.split("\n")
+    wrapped = []
+    for part in parts:
+        wrapped.append("\n".join(textwrap.wrap(part, width=max_chars)))
+    return "\n".join(wrapped)
 
 
 def plot_taxonomy_tree(
@@ -303,70 +390,178 @@ def plot_taxonomy_tree(
     sub_sizes: Dict[Tuple[int, int], int],
     out_path: str,
 ) -> None:
-    """Render Root → Cluster → Sub-cluster as a clean networkx tree."""
-    G = nx.DiGraph()
-    G.add_node("ROOT", label=root_label, level=0)
+    """Publication-quality taxonomy tree using raw matplotlib patches + text.
+
+    Why not networkx drawing?
+    -------------------------
+    nx.draw_networkx_labels auto-sizes boxes in font-space, giving zero
+    control over rendered box dimensions. When a 50-inch figure is scaled
+    to fit a paper column, text becomes unreadable. By drawing FancyBboxPatch
+    and ax.text manually in DATA coordinates, we guarantee every box is
+    large enough to read at the target print size.
+    """
+    from matplotlib.patches import FancyBboxPatch
+
+    # ── Collect nodes ──
+    nodes = {}   # id → {label, level, cid}
+    edges = []   # (parent_id, child_id)
+
+    nodes["ROOT"] = {"label": root_label, "level": 0, "cid": None}
 
     for cid, clabel in main_labels_map.items():
-        node = f"C{cid}"
-        G.add_node(node,
-                   label=f"{clabel}\n(n={main_sizes.get(cid, 0)})",
-                   level=1)
-        G.add_edge("ROOT", node)
+        nid = f"C{cid}"
+        nodes[nid] = {
+            "label": f"{clabel}\n(n={main_sizes.get(cid, 0)})",
+            "level": 1, "cid": cid,
+        }
+        edges.append(("ROOT", nid))
 
         for (parent_cid, sid), slabel in sub_labels_map.items():
             if parent_cid != cid:
                 continue
-            sn = f"C{cid}.S{sid}"
-            G.add_node(
-                sn,
-                label=f"{slabel}\n(n={sub_sizes.get((parent_cid, sid), 0)})",
-                level=2,
-            )
-            G.add_edge(node, sn)
+            snid = f"C{cid}.S{sid}"
+            nodes[snid] = {
+                "label": f"{slabel}\n(n={sub_sizes.get((parent_cid, sid), 0)})",
+                "level": 2, "cid": cid,
+            }
+            edges.append((nid, snid))
 
-    pos = _hierarchical_layout(G, "ROOT")
-
-    fig, ax = plt.subplots(figsize=(22, 12), dpi=140)
-
-    
+    # ── Pastel color palette ──
+    PASTEL_COLORS = [
+        "#fecaca", "#bbf7d0", "#bfdbfe", "#fed7aa", "#e9d5ff",
+        "#a5f3fc", "#f9a8d4", "#d9f99d", "#fde68a", "#c7d2fe",
+    ]
     unique_main = sorted(main_labels_map.keys())
-    cid_color = {cid: CLUSTER_COLORS[i % len(CLUSTER_COLORS)]
-                 for i, cid in enumerate(unique_main)}
+    cid_pastel = {cid: PASTEL_COLORS[i % len(PASTEL_COLORS)]
+                  for i, cid in enumerate(unique_main)}
 
-    node_colors = []
-    node_sizes = []
-    for n in G.nodes:
-        lvl = G.nodes[n]["level"]
-        if lvl == 0:
-            node_colors.append("#0f172a")
-            node_sizes.append(4200)
-        elif lvl == 1:
-            cid = int(n.replace("C", ""))
-            node_colors.append(cid_color.get(cid, "#0ea5e9"))
-            node_sizes.append(2600)
+    # ── Layout parameters (all in data-coordinate units) ──
+    # Designed for figsize≈(18,8) at 300 DPI → full-page landscape figure.
+    # Fonts are set to their FINAL print size (7-9pt), so what you see
+    # in the PNG is what prints in the paper.
+    BOX_W_L1      = 1.55    # width of level-1 boxes
+    BOX_H_L1      = 0.75    # height of level-1 boxes
+    BOX_W_L2      = 1.3     # width of level-2 boxes
+    BOX_H_L2      = 0.65    # height of level-2 boxes
+    BOX_W_ROOT    = 1.2
+    BOX_H_ROOT    = 0.55
+
+    SLOT_W_L2     = BOX_W_L2 + 0.25  # horizontal pitch per sub-cluster slot
+    MIN_SLOT_L1   = BOX_W_L1 + 0.35  # minimum pitch per main cluster
+    PARENT_GAP    = 0.35              # extra gap between main-cluster regions
+    Y_ROOT        = 6.5
+    Y_L1          = 4.0
+    Y_L2          = 1.0
+
+    # ── Bottom-up layout ──
+    l1_nodes = [nid for nid, d in nodes.items() if d["level"] == 1]
+    children_of = defaultdict(list)
+    for p, c in edges:
+        if nodes[c]["level"] == 2:
+            children_of[p].append(c)
+
+    # Width each L1 node needs = max(own box, children slots)
+    l1_widths = {}
+    for nid in l1_nodes:
+        nc = len(children_of.get(nid, []))
+        l1_widths[nid] = max(MIN_SLOT_L1, nc * SLOT_W_L2)
+
+    # Place L1 left-to-right
+    total_w = sum(l1_widths[n] for n in l1_nodes) + PARENT_GAP * max(0, len(l1_nodes) - 1)
+    pos = {}
+    cursor = -total_w / 2
+    for nid in l1_nodes:
+        w = l1_widths[nid]
+        pos[nid] = (cursor + w / 2, Y_L1)
+        cursor += w + PARENT_GAP
+
+    # Root centred
+    pos["ROOT"] = (0.0, Y_ROOT)
+
+    # L2 centred under parent
+    for parent, children in children_of.items():
+        px, _ = pos[parent]
+        n = len(children)
+        if n == 1:
+            pos[children[0]] = (px, Y_L2)
         else:
-            
-            parent_cid = int(n.split(".")[0].replace("C", ""))
-            node_colors.append(cid_color.get(parent_cid, "#84cc16"))
-            node_sizes.append(1700)
+            span = (n - 1) * SLOT_W_L2
+            for i, c in enumerate(children):
+                pos[c] = (px - span / 2 + i * SLOT_W_L2, Y_L2)
 
-    nx.draw_networkx_edges(G, pos, ax=ax, edge_color="#94a3b8",
-                           arrows=False, width=1.4)
-    nx.draw_networkx_nodes(G, pos, ax=ax,
-                           node_color=node_colors,
-                           node_size=node_sizes,
-                           edgecolors="white", linewidths=1.8)
-    nx.draw_networkx_labels(
-        G, pos,
-        labels={n: G.nodes[n]["label"] for n in G.nodes},
-        ax=ax, font_size=8.5, font_color="white",
-        bbox=dict(boxstyle="round,pad=0.35", ec="none", fc="#0f172abb"),
-    )
+    # ── Figure — sized for direct inclusion in a landscape paper figure ──
+    # At ~18 inches wide, a full-page landscape figure keeps fonts readable.
+    fig_w = max(18, total_w + 3)
+    fig, ax = plt.subplots(figsize=(fig_w, 9), dpi=300)
+
+    # ── Draw edges (thin lines from bottom-centre of parent box to
+    #    top-centre of child box) ──
+    for p, c in edges:
+        px, py = pos[p]
+        cx, cy = pos[c]
+        if nodes[p]["level"] == 0:
+            py_bot = py - BOX_H_ROOT / 2
+        else:
+            py_bot = py - BOX_H_L1 / 2
+        if nodes[c]["level"] == 1:
+            cy_top = cy + BOX_H_L1 / 2
+        else:
+            cy_top = cy + BOX_H_L2 / 2
+        ax.plot([px, cx], [py_bot, cy_top],
+                color="#64748b", linewidth=1.0, zorder=1)
+
+    # ── Draw boxes + text ──
+    font_family = "DejaVu Sans"
+
+    def draw_box(nid):
+        x, y = pos[nid]
+        info = nodes[nid]
+        lvl = info["level"]
+
+        if lvl == 0:
+            bw, bh = BOX_W_ROOT, BOX_H_ROOT
+            fc, ec, tc = "#1e293b", "#000000", "white"
+            fs, fw = 10, "bold"
+            wrap_at = 18
+        elif lvl == 1:
+            bw, bh = BOX_W_L1, BOX_H_L1
+            fc = cid_pastel.get(info["cid"], "#bfdbfe")
+            ec, tc = "#334155", "#0f172a"
+            fs, fw = 8, "semibold"
+            wrap_at = 18
+        else:
+            bw, bh = BOX_W_L2, BOX_H_L2
+            fc = cid_pastel.get(info["cid"], "#e2e8f0")
+            ec, tc = "#334155", "#0f172a"
+            fs, fw = 7.5, "normal"
+            wrap_at = 16
+
+        label = _wrap_label(info["label"], max_chars=wrap_at)
+
+        rect = FancyBboxPatch(
+            (x - bw / 2, y - bh / 2), bw, bh,
+            boxstyle="round,pad=0.08",
+            facecolor=fc, edgecolor=ec, linewidth=1.2, zorder=2,
+        )
+        ax.add_patch(rect)
+        ax.text(x, y, label,
+                ha="center", va="center",
+                fontsize=fs, fontweight=fw, fontfamily=font_family,
+                color=tc, zorder=3,
+                linespacing=1.15)
+
+    for nid in nodes:
+        draw_box(nid)
+
     ax.set_title("APT Research Taxonomy — HAC + Semantic Centroid Matching",
-                 fontsize=13, pad=14)
+                 fontsize=13, fontweight="bold", pad=12, fontfamily=font_family)
     ax.set_axis_off()
-    plt.tight_layout()
+    ax.autoscale_view()
+    # Add a little padding around the content
+    xvals = [p[0] for p in pos.values()]
+    yvals = [p[1] for p in pos.values()]
+    ax.set_xlim(min(xvals) - 2.5, max(xvals) + 2.5)
+    ax.set_ylim(min(yvals) - 1.5, max(yvals) + 1.5)
     plt.savefig(out_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     log.info(f"  ✓ Taxonomy tree → {out_path}")
@@ -419,7 +614,9 @@ def plot_corpus_distribution(df: pd.DataFrame, out_path: str) -> None:
     log.info(f"  ✓ Corpus distribution → {out_path}")
 
 
-
+# ╭──────────────────────────────────────────────────────────────────╮
+# │  MAIN                                                            │
+# ╰──────────────────────────────────────────────────────────────────╯
 def main() -> None:
     log.info("=" * 64)
     log.info("  APT Taxonomy — Stage 3: Hierarchical Clustering & Labeling")
@@ -474,7 +671,8 @@ def main() -> None:
     sub_labels_map: Dict[Tuple[int, int], str] = {}
     sub_sizes: Dict[Tuple[int, int], int] = {}
 
-    
+    # Build sub-gold-labels per main cluster: narrower, more specific
+    # variants that match the parent theme
     SUB_GOLD_LABELS = [
         "Detection & Classification",
         "Behavioral Analysis",
